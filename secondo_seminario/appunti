@@ -1,0 +1,323 @@
+=== Separating Data and Control Tranfer in DistributedOS ===
+-Abstract
+
+MIPS (Acronimo di Million Instructions Per Second, milioni di istruzioni per secondo)
+
+I miglioramenti portati alle architetture degli elaboratori hanno portato a workstation con la potenza di calcolo di 1000+MIPS. 
+
+I miglioramenti ci sono stati anche nell'ambito delle telecomunicazioni con reti sempre più efficienti ed affidabili. 
+
+Ciò ha dato la possibilità di intravedere un futuro in cui ci sia un accoppiamento sempre più stretto nei sistemi hardware distribuiti a livello hardware e il software si deve adattare di conseguenza.
+
+In questo paper viene proposto un modo alternativo per strutturare un sistema distribuito in modo da sfruttare il modello di comunicazione basato sull'accesso remoto alla rete (read and write) a segmenti di memoria protetti.
+
+key future: separation of | data transfer | control tranfer |
+
+
+
+
+Tale caratteristica è in contrasto con la struttura classica dei sistemi dirtibuiti che sono organizzati trmite scambio di messaggi oppure RPC(in cui sia il dato che il controllo deve essere trasferito anche se in alcune applicazioni il controllo risulta essere non necessario).
+
+//Implementazione su hardware DECstation e rete ATM(miglioramento della LAN)
+
+Obiettivi:
+	1) Miglioreare le performance
+	2) Ridurre il carico del server
+	2.1) Migliore scalabilità a fronte di un numero di client sempre maggiore
+
+Risultati:
+	1) Riduzione del carico sul server fino al 50%
+
+-Introduzione
+
+Il modello di comunicazione proposto fornisce un insieme si primitive al fine di accedere tramite processi a una memoria remota contigua virtuale di un altro processo. 
+
+Operazioni concesse ai processi quando si accede alla memoria (Bisogna avere i permessi per farlo):
+	1) Read 
+	2) Write
+	3) Compare-And-Swap
+
+-Problemi con RPC
+
+RPC era allpora il meccaniscmo di comunicazione predominante tra le compoenenti di un sistema distribuito, esso operava sostanzialmente in due semplici funzioni:
+
+	1) Trasferimento dei dati tre lo spazio di indirizzamento del client e quello del server. Tale implementazione può essere costosa per via di alcuni parametri come:
+		1) Il client può richiedere di effettuare il marshalling/unmarshalling dei parametri per la trasmissione
+		2) La copia dei dati tra il clien o il server e la rete. (protocollo SMB)
+	2) Trasferimento del cotrollo da un thread del client a un thread del server e viceversa. Per effettuare il controllo del trasferimento implica diverse azioni:
+		1) Bloccalre il thread del client che porta al rescheduling del processore del client
+		2) Elaborare il pacchetto RPC nell'OS di destinazione
+		3) Schedualre, assegnare  ed eseguire il thread del server
+		4) Reschedulare il processore del server non appena il pacchetto viene restituito
+		5) Elaborazione del pacchetto di risposta da parte dell'OS del client 
+		6) Schedulare e riprendere il thread originale del client
+
+Quindi per copiare anche un solo byte dal client al server, bisogna effettuare sia il trasferimento che il controllo che neanche i sistemi più ottimizzati riescono ad ottenere riduzioni sostanziali dei tempi. 
+
+Viene esaminata l'applicazione NFS file server  per un gruppo di 80-100 workstations con disco locale.
+
+Il file server fornisce:
+	1) X-terminal fonts
+		-https://en.wikipedia.org/wiki/X_terminal
+		-https://en.wikipedia.org/wiki/X_Window_System
+	2) Source trees (directory which contains all of the kernel source) 
+	3) /usr che continete i binari degli eseguibili.
+
+-Una struttura alternativa
+
+Viene discussa una nuova struttura per le applicazioni distribuite. 
+
+Riassunto: "il nostro obiettivo è migliorare le performance e la scalabilità dei servizi destribuiti"
+
+Per fare ciò ci sono 3 obiettivi di design:
+	1) Il sistema di ocmunicazione deve raggirare il bottleneck che può verificarsi quando viene richiesto un servizio. 
+	2) Riduzione del carico da parte del server per fornire scalabilità
+		1) Affidando più carico ai client
+	3) Riduzione del carico sula rete
+L'obiettivo è di sviluppare un cluster di workstation collegati in LAN e nello studio non viene calcolato il data loss in quanto viene classfificato come un evento molto raro per i controlli di flussi fatti all'interno della lan stessa.
+
+Tale scelta permette l'uso di primitive di comunicazione più semplificate, in particolare viene usato un modello di comunicazione basato sulle nozioni del remote network memory.
+In tale modello si può leggere e scrivere direttamente all'interno dello spazio di indirizzamento virtuale dei processi che sono presenti su altri computer all'interno della rete
+	1) Data trasfer only
+		1) Non è richiesta nessuna cooperazione con il processo remoto nè in lettura e nè in scrittura all'interno del suo spazio di indirizzamento
+
+
+-Il modello di comunicazione
+
+Insieme di primitive di comunicazione per accedere ad una memoria remota
+
+A livello astratto: Insieme di degmenti di memoria e operazioni (read,write) definite su di esse
+	1) Segmenti =  Pezzi contigui della memoria virtuale dell'utente
+		1) Definiti da applicazioni a livello utente
+		2) Controllati tramite descrittori in possesso a controller e software privilegiato.
+
+Le operezioni sui dati sono supportate attraverso "meta-istruzioni"
+
+Le applicazioni scambiano tali segmenti tramite un protocollo a più alto livello implementato da un segmento che prende il nome di "server"
+
+I segmenti sono protetti da accessi non autorizzati tramite grant/revoke dei permessi
+
+--Istruzioni di memoria
+
+Il modello di memoria remota è definito come un insieme di meta-istruzioni su coprocessore
+	1) Il fatto che le istruzioni siano definite su co-processore possono essere effiientemente emulate senza richiedere un hardware apposito
+
+il coprocessore contiene descrittori che definiscono segmenti di memoria remota. Ogni descrittore contiene:
+	1) Dimensione del segmento
+	2) Indirizo del nodo remoto
+	3) Informazioni di protezione
+
+Ci sono 3 meta-istruzioni non provilegiate:
+	1) WRITE
+	2) READ
+	3) CAS (Compare and Swap)
+
+forma della WRITE:
+	____________________
+	|rd|off|count|notify|
+	--------------------
+	(la d sta per destination)
+	rd) Registro del descrittore all'interno del coprocessore che identifica un segmento di memoria remoto
+	off) Offset dal byte iniziale nel segmento per la WRITE
+	count) Numero di byte che devono essere scritti
+	notify) Indica se la destinazione remota (tipo un server) deve essere notificata quando i dati la raggiungono
+
+Quando una write viene eseguita, il coprocessore verifica i permessi di chi vuole accedere alla memoria. Se il controllo va a buon fine allora il pacchetto viene spedito.
+
+Ulteriori caratteristiche della write:
+	1) Quando una write viene eseguita, il coprocessore verifica i permessi di chi vuole accedere alla memoria. Se il controllo va a buon fine allora il pacchetto viene spedito.
+		1) Openzione non bloccante
+		2) Quando una write viene completata localmente, il coprocessore garantisce che il dato è stato accettato dalla rete, non che è arrivato a destinazione.
+	2) Quando viene ricevuta una richiesta di write, il co-processore remoto utilizza [rd,off,count] per validare la richiesta
+		1) Il descrittore identifica uno spazio di indirizzamento virtuale all'interno di un processo
+		2) Il coprocessore legge le address translation tables per quel processo e legge i dati in memoria
+
+forma della READ:
+	_____________________________
+	|rs|soff|count|rd|doff|notify|
+	-----------------------------
+	
+	rs + soff) Identificano il segmento remoto e l'offset dove i dati dda leggere possono essere trovati
+	rd + doff) Identificano il segmento locale e l'offset dove i dati sono depositati
+
+Ulteriori caratteristiche della read: 
+
+	1) La richiesta non è bloccante
+	2) Il dato restituito dal processore remoto è messo nello spazio di indirizzamento di chi fa la richiesta
+	3) Non c'è bisogno di specificare di message registers (https://blog.wildix.com/understanding-register-method/) semplificando le istruzioni
+	4) Notify indica se chi legge deve essere accertito quando la read ritorna i dati. Senza di esso, chi invoca la read non ha idea di quando i dati vengano ricevuti. (L'unico modo di capire quando arriva il messaggio è di controllare ripetutamente la celle di memoria in cui il dato dovrebbe trovarsi.)
+
+Modello a memoria remota > Message passing per il trasferimento di dati... Perché?
+	Modello a memoria remota) I pacchetti e i dati immagazzinati specificano la destinazione del dato in memoria
+	Message passing) Specifica solo gli end-point della comunicazione (socket) il che fa aumentare l'overhead durante il demultiplexing e la copia dei dati.
+
+forma della CAS:
+	____________________________________
+	|rs|soff|old-value|rd|doff|new-value|
+	------------------------------------
+
+	Viene effettuato un confronto sul dato remoto finchè Old-value non è trovato, a quel punto viene sostituito con New-value.
+	Il risultato è 0 o 1.
+
+Necessitiamo di altre funzioni più specializzate per garantire le seguenti caratteristiche (read e write non bastano a soddisfare tutte le caratteristiche):
+
+	1) Descriptor maintenance
+	2) Import ed Export di segmenti
+	3) Pinning e Unpinning di pagine di memoria virtuale (Application-based)
+	4) Perettere la sincronizzazione
+	5) Controllo del trasferimento
+
+Il controllo del trasferimento e separato dall'invio dei dati, questo può essere compensato attraverso il campo notify ad esempio.
+Ogni descrittore del segmento ha un campo "Notify" che può avere 3 stati:
+	1) Always notify
+	2) Never notify
+	3) Conditionally notify (Dipende dal campo notify del pacchetto)
+	
+Da ciò si evince che non c'è un vero e proprio meccanismo di controllo.
+Il trasferimento di dati non è legato all'esecuzioni di thread o procedure.
+
+--Overview delle implementazioni e performance 
+**screen per le slide
+
+-La struttura delle applicazioni
+
+La struttura ha 4 pricipali componenti:
+	1) Clients e Server
+	2) Meccanismi di trasferimento dati specializzato (accesso alla memoria remota im modo doretto e protetto)
+	3) Server Clerks eseguiti sui client (https://in.indeed.com/career-advice/resumes-cover-letters/clerk-job-description)
+	4)Clerk-to-Sercer Data Transfer
+
+In alcune implementazione possiamo avere anche la rimozione totale del server, lasciando che i clerk mantengano lo stato de soli.
+
+Tale struttura permette di ottenere delle caratteristiche uniche:
+	1) Local cashing per ridurre la comunicazione tra le macchine
+	2) Viene eliminato il controllo del trasferimento dei dati tra le macchine (grazie ai clerk si puà ottenere solo il trasferimento dei dati)
+	3) Il trasferimento bidirezionale dei dati è ottimizzata (utilizzo dei clerk)
+
+L'utilizzo dei clerk fornisce un livello di astrazione simile a quella fornita dalle RPC.
+
+Nel nostro sistema lo stato del server è distribuito e tenuto in una cache locale.
+Ciò porta ad avere problemi di chache coerence e consistenza che devono essere risolti se il client ne fa esplicita richiesta.
+
+Non viene esplicitamente richiesto che il broadcast sia supportato dalla rete. Infatti gli autori dell'articolo non pensano che esista una singola policy per la cache coerence adattabile a tutti i servizi. La struttura proposta permette al singolo servizio l'uso di schemi più convenienti per il servizio stesso.
+
+Siccome il controllo è disaccoppiato dall'invio dei dati, ci aspettiamo che il carico del server sia alleggerito
+
+-Localizzare dati remoti
+
+Un'altra importante caratteristica è che i sistemi che sono distribuiti fanno parte della stessa applicazione.
+Ciò permette un'ulteriore ottimizzazione in quanto non c'è bisogno si scambi di messaggi, ma il clerk del server è a conoscenza di tutte le strutture dati.
+
+-Sinconizzazione
+
+La struttura proposta gestisce la sincronizzazione con i metodi più comuni all'interno dei sistemi distribuiti, in particolare abbiamo 4 modalità in cui la gestione viene gestita:
+
+	1) Evitare la sincronizzazione quando possile, anche in presenza di variabili condivise 
+	2) Sfruttare le proprietà di atomicità fornite dal modello di comunicazione
+	3) Utilizzare operazioni CAS per creare primitive di sincronizzazione
+	4) Implementando il controllo del flusso rendendolo simile al metodo con RPC
+
+- Sicurezza 
+
+I client accedono ai Clerk tramite RPC locali i quali fungono anhe da firewall. Per questo i client non possonodanneggiare nè il server nè i loro stessi clerk.
+
+Nel sistema così progettato c'è fiducia verso tutti i componenti ma come in un NFS portebbe essere richiesta l'implementazione di tecniche crittografiche. Cio' porta a dover cifrare e decifrare tutti i dati inviati tramite write e tutt i dati letti tramite read. Se la cifratura e la decifratura viene simulata con software, le prestazioni calano di molto per cui gli autori propongono soluzioni hardware.
+
+
+- Eterogeneità
+
+Supporta l'eterogeneità su diverse macchine
+
+-Cache Consistency e Recoverability
+
+La struttura proposta fa uso del local cashing dei dati e dello stato, quindi i meccanismi di cacache consistency e recupero a seguito di un crash sono molto importanti.
+
+Però solo con le primite di read e write non si può ottenere un meccanismo efficiente di fault-tollerance.
+Questo porta ad utilizzare meccansmi di timeout che sono semplici da implementare e anche leggeri.
+
+-Esempio: Semplice Name Server
+
+Scopo del name server: Mantenere il registro di nome e informazioni dei segmenti affinchè chi li importa e chi li esporta può comunicare.
+
+Il name server è organizzao come un insieme distribuito di clerk (uno per macchina) senza un server centrale.
+Il name server implementa 3 procedure:
+	
+	1) Aggiungere informazioni sui nomi dei segmenti esportati
+	2) Cercare informazioni sui nomi
+	3) Calcellare nomi
+
+I client del name server non sono utenti ma sono i kernel.
+
+I clerk invece avviano periodicamente dei refresh della cache dei nomi imporatati. Questo viene fatto per fornire, a seguito di un'operazione di lookup, i dati sempre aggiornati e le entries che non sono più valide vengono cancellate dalle tabelle del kernel.
+
+- Implemenrtazione
+
+In clerk sono creati all'avvio del sistema ed esportano segemtni well-known su cui è garantito il privilegio di scrittura. Successivamente vengono importati i segmenti well-known dalle altre macchine su cui in futuro si vorranno fare operazione di lookup.
+
+Ogni segmento well-known funge da registro per immagazzinare informazioni sugli altri segmenti ed è organizzato come un open-addressed hash table.
+
+
+- Esempio: File Service Distribuito
+
+I file system distribuiti come un NFS sono l'esempio più comune di servizio distribuito.
+Naturalmente molti file system distribuiti usano client e server basati su RPC.
+La maggior parte del traffico in un file system ha bisogno di coinvolgere solo i traffico dei dati.
+Rimuovendo però il controllo del flusso presente nell' RPC, si ottengono 2 imporatanti vantaggi:
+
+	1) Abbassato l'overhead di context switching, invocazioni di procedure ed eventuali blocchi
+	2) Eliminazione dell'overhead dato dall'elaborazione di dati non necessati
+
+- Il modello
+
+Ogni client esegue un server clerk.
+Sia il clerk che il server immagazzinano dati all'interno della cache. Questo perché anche i tradizionali NFS si comportano allo stesso modo, solo che il kernel del client funge da clerk.
+
+Siccome vengono immagazzinati dati all'interno della chache, allora avere delle policy di cache-consistency diventa fondamentale.
+
+Le cache vengono organizzate in aree distinte che contengono ognuna un'informazione specifica. Questo migliora il trasporto  di informazioni in quanto i server clerk lato client possono cercare le strutture dati richieste dal server e trasferirle senza dover adottare il controllo del trasferimento.
+
+Le aree:
+	- File data
+	- Name Lookup Data
+	- File attributes
+	- Directory Entries
+
+
+- Conclusioni 
+
+Il paper illustra una nuova struttura per sistemi distribuiti.
+Lo scopo è quello di svecchiare il modello basato su RPC per alcuni motivi principali
+
+	- Paradigma di programmazione semplice (pure poche primitive)
+	- La rete ha poca banda e molta latenza
+	- L'accessibilità di una risorsa non è prediibile
+
+
+(I cambiamenti della tecnologia porteranno a ripensare la struttura dei sistemi distribuiti.) bella
+
+La struttura proposta separa il flusso dei dati dal controllo quando non è necessario e fornisce primitive di accesso alla rete che si basano sul concetto di memoria remota.
+
+Ciò porta ad una maggiore performance e scalabilità dei sistemi distribuiti anche dato dal minor carico del server.
+
+Tale struttura è applicabile anche a sistemi con multiprocessore, quindi non è vincolato solo ai sisitemi distribuiti
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+==========

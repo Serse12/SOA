@@ -1,0 +1,500 @@
+Os tradizionali limitano:
+	-performance
+	-flessibilità
+	-funzionalità delle aplicazioni
+	-implementazione di astrazioni del sistema operativo come
+		-comunicazioni tra processi (IPC)
+		-virtual memory (VM)
+		
+il sistema operativo exokernel fornisce una gestione a livello applicativo di risorse fisiche
+
+l'architettura exokernel un piccolo kernel esporta le risorse hardware tramite un'interfaccia
+di basso livello ad untrusted LibOS.
+
+Exokernels are tiny, since functionality is limited to ensuring protection and multiplexing of resources, which is considerably simpler than conventional microkernels' implementation of message passing and monolithic kernels' implementation of high-level abstractions. 
+
+== What is LibOS ? ==
+
+Our objective is to build the kernel network stack as a shared library
+that can be linked to by userspace programs to provide network stack
+personalization and testing facilities, and allow researchers to more
+easily simulate complex network topologies of linux routers/hosts.
+
+Although the architecture itself can virtualize various things, the
+current design only focuses on the network stack. You can benefit
+network stack feature such as TCP, UDP, SCTP, DCCP (IPv4 and IPv6),
+Mobie IPv6, Multipath TCP (IPv4/IPv6, out-of-tree at the present
+moment), and netlink with various userspace applications (quagga,
+iproute2, iperf, wget, and thttpd).
+
+
+The library exposes an entry point as API, which is lib_init(), in
+order to connect userspace applications to the (userspace-version)
+kernel network stack. The clock source, virtual struct net_device, and
+scheduler are provided by caller while kernel resource like system
+calls is provided by callee.
+
+Once the LibOS is initialized via the API, userspace applications with
+POSIX socket can use the system calls defined in LibOS by replacing
+from the original socket-related symbols to the LibOS-specific
+one. Then application can benefit the network stack of LibOS without
+involving the host network stack.
+
+======
+
+=== trusted vs untrusted ===
+
+trusted software is one which has been carefully written and debugged that is used to implement the parts of the Operating System to ensure correct operation.
+
+Untrusted is one which has not been subjected to such careful analysis and the overall operation of the machine does not depend on the the operation of the untrusted operation.
+
+===
+
+Of course, not all applications need customized resource man-
+agement. Instead of communicating with the exokemel directly, we
+expect most programs to be linked with libraries that hide low-
+level resources behind traditional operating system abstractions,
+However, unlike traditional implementations of these abstractions,
+library implementations are unprivileged and can therefore be mod-
+ified or replaced at will. We refer to these unprivileged librnrics as
+library operating systems, or libOSes.
+
+la separazione della protezione delle risorse dalla gestione permette modifiche specifiche per
+ogni sistema operativo di cui vogliamo estendere,specializzare o sostituire librerie.
+
+exokernel infatti controlla le risorse in modi che un tradizionale sistema operativo non può
+per esempio è possibile dimostrare che la gestione a livello applicativo
+della virtual memory o della comunicazione tra processi è fino a 40 volte più veloce
+
+
+exokernel fino a 5 voltè più veloce dei tradizionali os
+
+
+l'OS è un'interfaccia tra le applicazioni e le risorse fisiche.
+gli os nascondono le informazioni delle risorse dietro ad astrazioni ad alto livello come
+	-processi
+	-file
+	-spazio di indirizzamento
+	-comunicazione tra processi
+	
+le implementazioni di tali astrazioni non può essere modificata da applicazioni untrusted.
+
+Library operating systems che lavora sull'interfaccia exokernel implementa astrazioni
+ad alto livello e chi scrive le applicazioni può selezionare le librerie o implementarele da sè.
+
+Le nuove implementazioni del Library Operating system sono incorporate tramite re-linking
+degli eseguibili.
+
+
+Cao et al. [10] reported that
+application-level control over file caching can reduce application
+running time by 45%. Harty and Cheriton [26] and Krueger et
+al. [30] showed how application-specific virtual memory policies
+can increase application performance. Stonebraker [47] argued
+that inappropriate file-system implementation decisions can have a
+dramatic impact on the performance of databases. Thekkath and
+Levy [50] demonstrated that exceptions can be made an order of
+magnitude faster by deferring signal handling to applications.
+
+exokernel separa la protezione dal management ma dovrebbe proteggere
+	-framebuffer senza conoscere il sistema di windowing
+	-un disco senza conoscere il filesyetem
+3 tecniche per fornire delle risorse hardware in modo sicuro:
+	1. Secure bindings
+	2. Visible resource revocation (resource revocation protocol)
+	3. Abort protocol (rompe i secure bindings con la forza se non cooperativi)
+	
+
+==== General purpose vs Application specific =========
+
+Fixed high-level abstractions hurt application performance be-
+cause there is no single way to abstract physical resources or to
+implement an abstraction that is best for all applications.
+
+Any such trade-off penalizes some class of applications. For example, relational
+databases and garbage collectors sometimes have very predictable
+data access patterns, and their performance suffers when a general-purpose page replacement strategy such as LRU is imposed by
+the operating system.
+
+Fixed high-level abstractions hide information from applications. implementing
+lightweight threads on top of heavyweight processes usually re-
+quires compromises in correctness and performance, because the
+operating system hides page faults and timer interrupts
+
+Applications know better than operating systems
+what the goal of their resource management decisions should be
+and therefore, they should be given as much control as possible over
+
+
+==== 
+
+- Library Operating Systems
+
+The implementations of abstractions in library operating systems
+can be simpler and more specialized than in-kernel implementa-
+tions, because library operating systems need not multiplex a re-
+source among competing applications with widely different de-
+mands. In addition, since libraries are not trusted by an exokernel,
+they are free to trust the application. For example, if an application
+passes the wrong arguments to a library, only that application will
+be affected.
+
+Applications that use an exokernel
+interface directly will not be portable, because the interface will include hardware-specific information.
+Applications that use library
+operating systems that implement standard interfaces (e.g., POSIX)
+will be portable across any system that provides the same interface.
+
+Come in un sistema a microkernel, un exokernel può
+fornire retro-compatibilita in 3 modi:
+	1.Emulazione binaria del sistema operativo e dei suoi programmi
+	2.Implementatndo il suo HW abstraction Layer sull'exokernel
+	3.re-implementando le astrazionidell'OS sull'exokernel
+	
+- Design Principles
+
+Un exokernel specifica i dettagli dell'interfaccia che il LibOS usa per interagire con le risorse
+
+Securely expose hardware: sicurezza con primitive a basso livello per permettere l'accesso
+diretto alle risorse 
+Expose allocation.
+Expose Names.
+Expose Revocation.(resource revocation protocol)
+
+-secure bindings
+
+l'exokernel multiplexa in modo sicuro le risorse , provvedendo protezione per applicazioni
+utualmente sospette.
+
+per fare in modo che l'exokernel  protegga le risorse in modo efficiente, permette al
+LibOS di collegare le risorse utilizzando secure bindings.
+
+secure binding: meccanismo di protezione che disaccoppia l'autorizzazione dall'utilizzo della
+risorsa.
+
+miglioramento delle performance in due modi:
+	1.i controlli di sicurezza che prendono parte ad un secure binding sono espresse con operazioni semplici che in kernel può implementare in modod molto rapido.
+	2.controlla l'autorizzazione sono nel momento in cui viene effettuto il bind (management disaccoppiato dalla protezione)
+
+
+Simply put, a secure binding allows the kernel to
+protect resources without understanding them
+
+requirement: insieme di primitive che software a livello applicativo possono usare per esprimere controlli della protezione (sia HW che SW)
+
+HW: TLB entry
+A translation lookaside buffer (TLB) is a memory cache that stores the recent translations of virtual memory to physical memory. 
+
+3 modi per implementare secure binding:
+	1.HW
+	2.SW
+	3.Download application code
+	
+
+-Multiplexing physical memory
+
+Quando un LibOS alloca una pagina della memoria fisica l'exokernel crea un secure binding per quella pagina registrando l'owner e i permessi di lettura e scrittura specificati da LibOS. L'owner di una pagina può modificare i permessi e deallocarla.
+
+Per controllare i permessi di accesso a una determinata pagina di memoria viene usata una TLB 
+
+Per rompere un secure binding un exokernel deve cambiare i permessi associati e marcare le risorse come libere. (flush dei mappings TLB)
+
+-multiplexing the network
+
+Si devono conoscere i protocolli utilizzati per interpetrare il contenuto dei messaggi che si ricevono e per identificare il destinatario.
+
+Delivering received segments at the receiver side to the correct app layer processes is called demultiplexing. 
+Il demultiplexing può essere fornito sia a livello HW che SW
+	-HW: circuito viruale in celle ATM(Asynchronous Transfer Mode) per collegare flussi ad applicazioni
+	-SW: packet filters (esempio di secure binding in cui il codice è scaricato nel kernel)
+	
+Per quanto riguarda i messaggi in uscita, si può condividere l'interfaccia di rete.
+
+-downloading code
+alternativa all' implementazione del sicure binding e scaricare codice nel kerl porta a due vantaggi di performance 
+	1.eliminazione del kernel crossing
+	A kernel crossing occurs when a program explicitly calls a service routine that requires kernel privilege to execute. When this happens, one of two things happens: a fat system call or a thin system call
+	2.il tempo di esecuzione può essere stimato e delimitato
+	
+ASH (Application-specific Safe Handlers) sono un esempio di codice scaricato.
+Essi possono essere scaricati nel kernel per partecipare all'elaborazione dei messaggi. Un ASH è associato ad un packet filter e viene eseguito quando un pacchetto viene ricevuto
+
+Usando gli ASH la latenza del roundtrip è ridotta al minimo in quanto la risposta viene inviata al momento dell'arrivo del messaggio invece di essere accumulata fin quando l'applicazione è schedulata.
+
+-visible resource revocation
+
+Quando una risorse viene collegata ad una applicazione si deve poter pure rilasciare a risorsa e romepere il secure binding.
+Tale revocazione può essere sia visibile che invisibie
+I tradizionali OS lo fanno in modo invisibile
+L'exokernel utilizza la  revocazione visibile delle risorse per permettere al LibOS di salvare lo stato del processore solo quando richiesto
+	
+-revocation and physical naming
+
+Un exokernel deve esportare nomi fisici siccome sono efficienti e non c'è bisogno di tradurre i nomi virtuali in fisici.
+
+-the abort protocol
+
+se viene effettuata una richiesta di revoca di una risorsa e ciò non avviene, allora l'exokernel definisce una seconda fase del protocollo di revoca in cui viene imposto un rilascio delle risorse in un tempo stabilito. (rompe i secure bindings)
+
+questo comportamento definisce l'abort protocol
+
+difficoltà: stabilere dei bounds in tempi reali per l'esecuzione dei programmi
+
+per gestire le risorse che devono essere revocate e quelle no, il LibOS utilizza una lista che prende il nome di repression vecotr
+
+-status and experimental methodology
+sono stati implementati due sistemi software che seguono l'architettura eokernel:
+	1. Aegis: exokernel
+	2. ExOS: LibOS
+	
+Prototipo:
+	-Glaze: exokernel per SPARC-based shared-memory multiprocessor, insieme a PhOS un LibOS parallelo.
+	
+Aegis and ExOS are implemented on MIPS-based DECstations.
+Aegis exports the processor, physical memory, TLB, exceptions,
+and interrupts. In addition, it securely exports the network inter-
+face using a packet filter system that employs dynamic code gen-
+eration. ExOS implements processes, virtual memory, user-level
+exceptions, various interprocess abstractions, and several network
+protocols (ARP/RARP, IP, UDP, and NFS). A native extensible file
+system that implements global buffer management is under devel-
+opment.
+
+The comparisons with Ultrix serve two purposes. First, they
+show that there is much overhead in today’s systems, which can
+be easily removed by specialized implementations. Second, they
+provide a well-known, easily-accessible point of reference for un-
+derstanding Aegis’s and ExOS’s performance.
+
+- 3  paragrafi dedicati a Aegis
+
+Table 1 shows the specific machine configurations used in the ex-
+periments.
+Table 2 lists a subset of the Aegis interface.
+
+
+- processor time slices
+Aegis rappresenta la CPU come un vettore linerare dove ogni elemento di tale vettore corrisponde ad un time slice.
+Scheduling in round robin
+è presente una proprioetà che prende il nome di position che rappresenta un upperbound di quando le azioni devono essere eseguite.
+
+- processor enviroement
+
+Il processor enviroment di Aegis è una struttura che immagazzina informazioni per inviare degli eventi alle applicazioni.
+Ci sono 4 tipi di eventi:
+	1.Exception context
+	2.Interrupt context
+	3.Protectd Entry context
+	4.Addressing contex
+
+Aegis ha due percorsi per le System call:
+	1.Senza stack
+	2.Con stack
+
+Some system calls are further demultiplexed by the kernel. For example, the Berkeley Software Distribution (BSD) socket calls ( socket, bind, connect, and so on) are associated with a single system call index (_NR socketcall) but are demultiplexed in the kernel to the appropriate call through another argument.
+
+Con questa soluzione il demultiplexing di system call composte è molto più rapido rispetto ad Ultrix
+
+- exception
+per eseguire le eccezzioni, Aegis compie vari passi:
+	1.salva 3 scratch registers
+	2.carica
+		1.exeption program counter
+		2.l'ultimo indirizzo virtuale tradotto tramite TLB
+		3.causa dell' eccezione
+	3.jump  al program counter dell'applicazione con i permessi opportunamente modificati
+	
+dopo aver processato l'eccezione, l'applicazione può immediatamente riprendere l'esecuzione senza passare per il kernel
+
+- address translation
+supportare la memoria virtuale a livello applicativo comporta 2 problemi: 
+	1.Bootstrapping del virtual naming system
+	2.Efficienza
+
+Aegis supporta il bootstrapping tramite un piccolo numero di mapping "garantiti".
+Ovviamente se il mapping dovesse fallire, sarà lanciata un'eccezione che sarà gestita automaticamente da Aegis.
+
+per poter garantire dei mappings, la memoria è divisa in due segmenti.
+Nel primo sono contenuti i dati delle appocazioni e codice.
+Nel secondo ci sono tipicamente codici per la gestione delle eccezioni e page-tables
+
+- protected control transfers
+
+Per permettere la comunicazione tra processi in modo efficiente vengono usati i protected control transfers
+
+Sostituzione del program counter con un valore concordato che denota la time slice del processor environment e installa gli elemeti del processor context
+Essi possono essere:
+	-Sincroni
+	-Asincroni
+Entrambi garantiscono due importanti proprietà:
+	-Atomicità delle oprazioni
+	-Aegis non sovracsriverà i registri (consistenza)
+
+
+-dynamic packet filter dpf
+Il sottosistema network di Aegis deve fornire un efficiente demultiplexing dei messaggi e la loro gestione.
+Nei tradizionali OS i packet filters sono interpetrati quindi computazionalmente onerosi
+in Aegis ciò viene fatto tramite DPF che permettono la generazione automatica di codice eseguibile
+ciò viene fatto in due modi: 
+	1.Compilando i packet filters quando sono installati nel kernel
+	2.Utilizzando dei filtraggi prestabliti per ottimizzare il codice eseguibile in modo aggressivo
+	
+Utilizza VCode per compilare
+
+- summary
+Aegis ha buone performance per i seguenti motivi:
+	1.Gestione dell'ownership
+	2.Kernel piccolo
+	3.Caching dei secure binding in TLB implementate a livello software
+	4.Scaricando i packet filters e utilizzando la generazione automatica di codice, i secure bindings possono essere effettuati in modo efficiente
+	
+	
+
+===========paper Kaashoek
+
+-abstract
+
+l'architettura OS con exokernel fornisce in modo sicuro il controllo sulle risorse sia hardware che sofrtware separando la gestione di tali risorse dalla loro protezione.
+vengono valutate le performance di questo exokernel su Xok (un exokernel per intelx86) e comparando tali performance con due sistemi largamente utilizzati (FreeBSD e OpenBSD)
+
+-introduzione
+
+This organization is flawed because application demands
+vary widely. An interface designed to accommodate every appli-
+cation must anticipate all possible needs. The implementation of
+such an interface would need to resolve all tradeoffs and antic-
+ipate all ways the interface could be used.
+
+
+the exokemel protects the resources, but applications manage them.
+
+esperimenti sul sistema Xok/ExOS
+
+è stato dimostrato che un controllo a livello applicativo può dar vita anche ad HTTP Server altamente efficienti comm Cheetah
+
+Cheetha utilizza una versione modificata di:
+	-File system
+	-implementazione di TCP
+in base alle proprietà del traffico HTTP
+
+Cheeta è 8 volte più veloce del migliore server HTTP bsato su Unix.
+
+disk subsystem: XN
+
+-related works
+
+Ci sono stati diversi approcci per l'estendibilità:
+	-migliori microkernel (per fornire controllo più a basso livello)
+	-virtual machines (nasconde le informazioni)
+	-scaricare codice untrusted all'interno del kernel (ad esempio in SPIN)
+	
+l'obiettivo proncipale di un exokernel è anche quello di risolvere il dibattito tra struttura monolitica contro microkernel
+
+-Kernel support for protected abstractions
+
+Many of the resources protected by traditional operating systems are themselves high-level abstractions. Files, for instance, consist of metadata, disk blocks, and buffer cache pages, all of which are guarded by access control on high-level file objects.
+
+Gli exokernel devono garantire la protezione fornendo anche un controllo sugli accessi ad oggetti definiti ad alto livello(tipo i file)
+
+Xok fornisce questa protezione tramite 3 tecniche
+	1.Controllo degli accessi su tutte le risorse alla stessa maniera
+	2.Astrazioni software per collegare insieme risorse hardware (figura 1)
+	3.Alcune applicazioni dello Xok permetto il dowload di codice
+
+-xn
+
+è un sistema di storage stabile per exokernel
+fornisce un accesso ad uno storage stabile a livello di blocchi sul disco, esportando un buffer cache registry.
+
+Lo scopo principale di XN è determinare i permessi di accesso di chi accede ad un determinato bloccco in memoria nel modo più efficente possibile.
+
+Bisogna prevenire che un utente malevolo si impossessi di blocchi sul disco che non gli appartengono 
+
+XN utilizza UDF (Untrusted Deterministic Functions) che sono funzioni per la traduzione di metadati specifici per ogni tipo di file.
+
+UDF analizza e traduce i metadati in un modo più semplice per il kernel.
+In questo modo il kernel può analizzare in modo effeciente i metadati senza conoscere il layout con il quale sono scritti.
+
+gli UDF sono immagazzinati in strutture chiamate templates in cui ad ogni template corrisponde un particolare formato di metadato
+
+-xn problem and history
+
+il requisito più difficle da ottenere in modo efficiente è di ottenere i permessi che un utente possiede su un particolare blocco del disco.
+	-Disc-block-level multiplexing (associa ad ogni blocco un'ACL)
+		-causa un enorme hoveread di tempo in quanto si deve accedere al disco due volte per ogni blocco (lettura e controllo dei permessi)
+	-Self -desceptive metadata (ogni blocco aveva una parte iniziale che andava a descrivere il blocco in sè, metadati application-specific)
+		-overhead di spazio  e complessità di modifica in quanto le strutture dati nel file system non hanno un formato universale
+	-Template-based description 
+		-ci si è resi conto che effettivamente non è possibile avere un formato universale ma è altrettanto vero che  le strutture dati su disco sono poche quindi è possiblie descriverle usando dei template
+	
+-xn requirements and approach
+
+	1.Non consentire accessi non autorizzati, per velocità utilzza i secure binings per effettuare i controlli sugli accessi al momento del bind e non per ogni accesso
+	2.XN deve determinare senza abiguità quali permessi un utente ha su ogni blocco (UDF)
+	3.deve gerantire che gli aggiornamenti del disco non permettono, in caso di crash, ad un libOS di accedere a memoria che non è stata allocata 
+	
+l'integrità del disco è garantita dal rispetto delle regole dettate da Ganger e Patt
+	
+Questo permette a più libOS di poter coesistere sullo stesso sistema 
+
+
+- C-FFS Lib File System
+
+XN fornisce la protezione base per gaarantire l'integrità ma i file system devono poter garantire anche altri tipi di requisiti, ad esempio il file system di Unix deve poter garantire l'unicità del nome di un file all'interno della directory
+
+questo tipo di requisiti può essere fornito tramite 3 modi:
+	1.Nel kernel
+	2.In un server
+	3.programmazione sicura
+
+C-FFS scarica i metodi direttamente all'interno del kernel per controllare i suoi requisiti.
+in C-FFS ci sono 4 principali meccanismi di protezione:
+
+	1. Access Control (uid,gid...)
+	2. Aggiornamenti well-formed: UNIX-specific file semantics
+	3. Atomicità (dati sempre reperibili e scrittura abilitata solo quando i metadati sono consistenti)
+	4.Aggiornamenti impliciti (ad es. la modifica di un file comporta l'aggiornamento della data in cui sono stati modificati l'ultima volta)
+	
+	
+l'interfaccia XN è utile anche per poter interfacciare diversi filesystem contemporaneamente 
+log-structured file systems, RAID,and memory-based file systems)
+
+
+-Cheetah HTTP/1.0 Server
+
+l'architettura ad exokernel è ottimale per la costruzione di server ad alte performance.
+I server sono basati su I/O e per questo è stata sviluppada una libreria XIO per un I/O estendibile ed un'applicazione che la utilizza ovvero Cheeta HTTP Server
+
+il compito di un server HTTP/1.0 è semplice
+	-il client richiede una risorse
+	-il server la trova
+	-la restituisce al client
+	
+Cheeta Web server esegue le seguenti orrimizzazioni
+	1.Merged File Cache e Pool di ritrasmissiione
+		-evita 
+			-che la cpu debba accedere sempre in memoria 
+			-pool di ritrasmissione TCP
+		-trasmette i file  tramite cache ed utilizza checksum pre-computate
+	2. Knowledge-based Packet Merging.
+		-vengono tenute conto le transazioni di stato che avvengono per ogni richiesta in modo da ridurre il numero di I/O. (es. evita di mandare de controllo ridondanti ai client ritardando gli ACK sulle richieste HTTP del client in quanto saranno mandati successivamente sulla risorsa resistituita)
+	
+	3.HTML-based File Grouping
+		-alloca i file contenuti in un documento HTML in blocchi adiacenti ad esso, solo quanto possibile
+	
+
+-fine
+The exokernel concept has been around since at least 1994,[3] but as of 2010 exokernels are still a research effort and have not been used in any major commercial operating systems. 
+
+
+
+
+
+
+
+
+
+
+
+
+
